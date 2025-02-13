@@ -1,277 +1,249 @@
-/**
- * Slack Approval Bot
- * This bot enables an approval workflow in Slack where users can request approvals
- * from other team members using a slash command.
- */
+// const express = require("express")
+// const { WebClient } = require("@slack/web-api")
+// const { createEventAdapter } = require("@slack/events-api")
+// require("dotenv").config()
 
-const { App } = require('@slack/bolt');
-require('dotenv').config();
+import express from "express"
+import { WebClient } from "@slack/web-api"
+import { createEventAdapter } from "@slack/events-api"
+import dotenv from "dotenv";
+dotenv.config();
 
-// Initialize the Slack app with required tokens
-const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true,
-  appToken: process.env.SLACK_APP_TOKEN,
-});
 
-/**
- * In-memory storage for pending approvals
- * In production, consider using a persistent database
- * @type {Map<string, Object>}
- */
-const pendingApprovals = new Map();
+const app = express()
+const port = process.env.PORT || 3000
 
-/**
- * Handles the /approval-test slash command
- * Opens a modal for users to submit approval requests
- */
-app.command('/approval-test', async ({ command, ack, client, body }) => {
-  // Acknowledge the command request immediately
-  await ack();
+// Initialize Slack Web Client
+const web = new WebClient(process.env.SLACK_BOT_TOKEN)
 
+// Initialize a Slack Events API adapter
+const slackEvents = createEventAdapter(process.env.SLACK_SIGNING_SECRET)
+
+// IMPORTANT: Mount the event adapter middleware first
+app.use("/slack/events", slackEvents.requestListener())
+
+// Then add other middleware
+// Use urlencoded for slash commands
+app.use(express.urlencoded({ extended: true }))
+// Use json parser for interactions
+app.use(express.json())
+
+// Store pending approvals (in-memory storage - consider using a database for production)
+const pendingApprovals = new Map()
+
+// Handle slash command
+app.post("/slack/commands/approval-test", async (req, res) => {
   try {
-    // Fetch list of workspace users for the approver selection dropdown
-    const result = await client.users.list();
-    const users = result.members
-      .filter(user => !user.is_bot && user.id !== 'USLACKBOT')
-      .map(user => ({
-        text: {
-          type: 'plain_text',
-          text: user.real_name || user.name
-        },
-        value: user.id
-      }));
+    // Log the request body to debug
+    console.log("Slash command request body:", req.body)
 
-    // Open modal with approval request form
-    await client.views.open({
-      trigger_id: body.trigger_id,
+    // Verify we have a trigger_id
+    if (!req.body.trigger_id) {
+      console.error("No trigger_id found in request body")
+      return res.status(400).send("Invalid request: No trigger_id found")
+    }
+
+    const result = await web.users.list()
+    const users = result.members
+      .filter((user) => !user.is_bot && user.id !== "USLACKBOT")
+      .map((user) => ({
+        text: {
+          type: "plain_text",
+          text: user.real_name || user.name,
+        },
+        value: user.id,
+      }))
+
+    await web.views.open({
+      trigger_id: req.body.trigger_id,
       view: {
-        type: 'modal',
-        callback_id: 'approval_modal',
+        type: "modal",
+        callback_id: "approval_modal",
         title: {
-          type: 'plain_text',
-          text: 'Request Approval'
+          type: "plain_text",
+          text: "Request Approval",
         },
         blocks: [
           {
-            type: 'input',
-            block_id: 'approver_block',
+            type: "input",
+            block_id: "approver_block",
             label: {
-              type: 'plain_text',
-              text: 'Select Approver'
+              type: "plain_text",
+              text: "Select Approver",
             },
             element: {
-              type: 'static_select',
+              type: "static_select",
               placeholder: {
-                type: 'plain_text',
-                text: 'Select an approver'
+                type: "plain_text",
+                text: "Select an approver",
               },
               options: users,
-              action_id: 'approver_select'
-            }
+              action_id: "approver_select",
+            },
           },
           {
-            type: 'input',
-            block_id: 'approval_text_block',
+            type: "input",
+            block_id: "approval_text_block",
             label: {
-              type: 'plain_text',
-              text: 'Approval Request Details'
+              type: "plain_text",
+              text: "Approval Request Details",
             },
             element: {
-              type: 'plain_text_input',
+              type: "plain_text_input",
               multiline: true,
-              action_id: 'approval_text_input'
-            }
-          }
+              action_id: "approval_text_input",
+            },
+          },
         ],
         submit: {
-          type: 'plain_text',
-          text: 'Submit'
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Error handling slash command:', error);
-  }
-});
-
-/**
- * Handles the submission of the approval request modal
- * Sends approval request to the selected approver
- */
-app.view('approval_modal', async ({ ack, body, view, client }) => {
-  await ack();
-
-  // Extract form values
-  const approver = view.state.values.approver_block.approver_select.selected_option.value;
-  const approvalText = view.state.values.approval_text_block.approval_text_input.value;
-  const requesterId = body.user.id;
-
-  // Generate unique ID for this approval request
-  const approvalId = `approval_${Date.now()}`;
-
-  // Store approval request in memory
-  pendingApprovals.set(approvalId, {
-    requesterId,
-    approver,
-    approvalText,
-    status: 'pending'
-  });
-
-  try {
-    // Send approval request to approver
-    await client.chat.postMessage({
-      channel: approver,
-      text: `New approval request from <@${requesterId}>: ${approvalText}`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `You have a new approval request from <@${requesterId}>:\n\n>${approvalText}`
-          }
+          type: "plain_text",
+          text: "Submit",
         },
-        {
-          type: 'actions',
-          block_id: 'approval_actions',
-          elements: [
+      },
+    })
+
+    res.status(200).send("Request sent successfully")
+  } catch (error) {
+    console.error("Error handling slash command:", error)
+    res.status(500).send("Failed to handle command")
+  }
+})
+
+// Handle interactive components (modal submissions and button clicks)
+app.post("/slack/interactions", async (req, res) => {
+  try {
+    // For interactions endpoint, the payload comes as a string that needs to be parsed
+    const payload = JSON.parse(req.body.payload)
+    console.log("Interaction payload:", payload)
+
+    if (payload.type === "view_submission" && payload.view.callback_id === "approval_modal") {
+      // Handle modal submission
+      const approver = payload.view.state.values.approver_block.approver_select.selected_option.value
+      const approvalText = payload.view.state.values.approval_text_block.approval_text_input.value
+      const requesterId = payload.user.id
+      const approvalId = `approval_${Date.now()}`
+
+      pendingApprovals.set(approvalId, {
+        requesterId,
+        approver,
+        approvalText,
+        status: "pending",
+      })
+
+      try {
+        await web.chat.postMessage({
+          channel: approver,
+          text: `New approval request from <@${requesterId}>: ${approvalText}`,
+          blocks: [
             {
-              type: 'button',
+              type: "section",
               text: {
-                type: 'plain_text',
-                text: 'Approve'
+                type: "mrkdwn",
+                text: `You have a new approval request from <@${requesterId}>:\n\n>${approvalText}`,
               },
-              style: 'primary',
-              value: approvalId,
-              action_id: 'approve_request'
             },
             {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: 'Reject'
+              type: "actions",
+              block_id: "approval_actions",
+              elements: [
+                {
+                  type: "button",
+                  text: {
+                    type: "plain_text",
+                    text: "Approve",
+                  },
+                  style: "primary",
+                  value: approvalId,
+                  action_id: "approve_request",
+                },
+                {
+                  type: "button",
+                  text: {
+                    type: "plain_text",
+                    text: "Reject",
+                  },
+                  style: "danger",
+                  value: approvalId,
+                  action_id: "reject_request",
+                },
+              ],
+            },
+          ],
+        })
+
+        res.status(200).send("")
+      } catch (error) {
+        console.error("Error sending approval request:", error)
+        res.status(500).send("Failed to send approval request")
+      }
+    } else if (payload.type === "block_actions") {
+      // Handle button clicks
+      const action = payload.actions[0]
+      const approvalId = action.value
+      const approval = pendingApprovals.get(approvalId)
+
+      if (approval) {
+        const isApproved = action.action_id === "approve_request"
+        approval.status = isApproved ? "approved" : "rejected"
+
+        try {
+          // Notify requester
+          await web.chat.postMessage({
+            channel: approval.requesterId,
+            text: `Your request has been ${isApproved ? "approved" : "rejected"} by <@${payload.user.id}>.`,
+            blocks: [
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `Your request has been ${isApproved ? "approved" : "rejected"} by <@${payload.user.id}>.`,
+                },
               },
-              style: 'danger',
-              value: approvalId,
-              action_id: 'reject_request'
-            }
-          ]
-        }
-      ]
-    });
+            ],
+          })
 
-    // Notify requester that their request was sent
-    await client.chat.postMessage({
-      channel: requesterId,
-      text: `Your approval request has been sent to <@${approver}>.`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `Your approval request has been sent to <@${approver}>.`
-          }
+          // Update original message
+          await web.chat.update({
+            channel: payload.channel.id,
+            ts: payload.message.ts,
+            text: `Request ${isApproved ? "approved" : "rejected"}: ${approval.approvalText}`,
+            blocks: [
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `Request from <@${approval.requesterId}> has been *${isApproved ? "approved" : "rejected"}*:\n\n>${approval.approvalText}`,
+                },
+              },
+            ],
+          })
+
+          res.status(200).send("")
+        } catch (error) {
+          // console.error("Error handling approval action:", error)
+          res.status(500).send("Failed to process approval action")
         }
-      ]
-    });
+      } else {
+        res.status(404).send("Approval request not found")
+      }
+    }
   } catch (error) {
-    console.error('Error sending approval request:', error);
+    console.error("Error processing interaction:", error)
+    res.status(500).send("Failed to process interaction")
   }
-});
+})
 
-/**
- * Handles the approval button action
- * Updates the approval status and notifies the requester
- */
-app.action('approve_request', async ({ ack, body, client }) => {
-  await ack();
-  const approvalId = body.actions[0].value;
-  const approval = pendingApprovals.get(approvalId);
+// Add a basic health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).send("OK")
+})
 
-  if (approval) {
-    approval.status = 'approved';
-    
-    // Notify requester of approval
-    await client.chat.postMessage({
-      channel: approval.requesterId,
-      text: `Your request has been approved by <@${body.user.id}>!`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `Your request has been approved by <@${body.user.id}>!`
-          }
-        }
-      ]
-    });
+// Start the server
+app.listen(port, () => {
+  console.log(`⚡️ Slack bot is running on port ${port}`)
+})
 
-    // Update original approval request message
-    await client.chat.update({
-      channel: body.channel.id,
-      ts: body.message.ts,
-      text: `Request from <@${approval.requesterId}> has been approved: ${approval.approvalText}`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `Request from <@${approval.requesterId}> has been *approved*:\n\n>${approval.approvalText}`
-          }
-        }
-      ]
-    });
-  }
-});
+// Handle errors
+slackEvents.on("error", console.error)
 
-/**
- * Handles the reject button action
- * Updates the approval status and notifies the requester
- */
-app.action('reject_request', async ({ ack, body, client }) => {
-  await ack();
-  const approvalId = body.actions[0].value;
-  const approval = pendingApprovals.get(approvalId);
-
-  if (approval) {
-    approval.status = 'rejected';
-    
-    // Notify requester of rejection
-    await client.chat.postMessage({
-      channel: approval.requesterId,
-      text: `Your request has been rejected by <@${body.user.id}>.`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `Your request has been rejected by <@${body.user.id}>.`
-          }
-        }
-      ]
-    });
-
-    // Update original approval request message
-    await client.chat.update({
-      channel: body.channel.id,
-      ts: body.message.ts,
-      text: `Request from <@${approval.requesterId}> has been rejected: ${approval.approvalText}`,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `Request from <@${approval.requesterId}> has been *rejected*:\n\n>${approval.approvalText}`
-          }
-        }
-      ]
-    });
-  }
-});
-
-// Start the app
-(async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log(`⚡️ Approval Bot is running on port ${process.env.PORT || 3000}!`);
-})();
+export default app;
