@@ -72,12 +72,7 @@ The server will start on the port specified in your .env file (defaults to 3000)
 - POST /slack/interactions: Processes button clicks and other interactive elements
 - GET /health: Returns server health status
 - POST /slack/events: Handles Slack events
-## Security Considerations
-- Always validate the Slack signing secret
-- Use environment variables for sensitive information
-- Implement rate limiting for production use
-- Keep dependencies updated
-- Monitor server logs for suspicious activity
+
 ## Troubleshooting
 If you encounter issues:
 1. Check that all environment variables are set correctly
