@@ -4,3 +4,4 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const web = new WebClient(process.env.SLACK_BOT_TOKEN);
+// SLACK_SIGNING_SECRET

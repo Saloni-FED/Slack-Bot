@@ -1,12 +1,10 @@
 // import request from "supertest";
 // import app from "../app"; // Ensure this correctly imports your Express app
 
-
 import request from "supertest";
 import app from "../app";
-import { web } from "../slackClient"; // Mock the Slack WebClient instance
+// import { web } from "../slackClient"; // Mock the Slack WebClient instance
 import { jest } from "@jest/globals";
-
 
 jest.mock("../slackClient", () => ({
   web: {
@@ -18,8 +16,6 @@ jest.mock("../slackClient", () => ({
 }));
 
 describe("POST /slack/interactions", () => {
- 
-
   it("should return 500 for invalid JSON payload", async () => {
     const response = await request(app)
       .post("/slack/interactions")
@@ -42,3 +38,4 @@ describe("GET /health", () => {
     expect(response.headers["content-type"]).toMatch(/text\/html/);
   });
 });
+
