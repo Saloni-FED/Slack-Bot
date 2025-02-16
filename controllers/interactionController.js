@@ -3,6 +3,8 @@ import { web } from "../slackClient.js"
 // Store pending approvals (in-memory storage - consider using a database for production)
 const pendingApprovals = new Map()
 
+
+// Code for modal interaction
 export const interactionController = async (req, res) => {
   try {
     const payload = JSON.parse(req.body.payload)
@@ -18,6 +20,9 @@ export const interactionController = async (req, res) => {
     res.status(500).send("Failed to process interaction")
   }
 }
+
+
+// Modal submission code where user will submit the modal after choosing Approver and Writing Description
 
 async function handleModalSubmission(payload, res) {
   const approver = payload.view.state.values.approver_block.approver_select.selected_option.value
@@ -80,6 +85,9 @@ async function handleModalSubmission(payload, res) {
   }
 }
 
+
+// This is the code when approver will select wether it is Rejected or approved
+
 async function handleButtonClick(payload, res) {
   const action = payload.actions[0]
   const approvalId = action.value
@@ -103,6 +111,8 @@ async function handleButtonClick(payload, res) {
   }
 }
 
+
+// This is the code after approver will select button approve or reject , a notification will send to requester
 async function notifyRequester(approval, isApproved, approverId) {
   await web.chat.postMessage({
     channel: approval.requesterId,

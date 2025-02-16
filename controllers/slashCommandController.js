@@ -1,5 +1,6 @@
 import { web } from "../slackClient.js"
 
+//Code what will happen if /approval-request got hit in slack
 export const slashCommandController = async (req, res) => {
   try {
     console.log("Slash command request body:", req.body)
