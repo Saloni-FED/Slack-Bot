@@ -39,6 +39,10 @@ async function handleModalSubmission(payload, res) {
 
   try {
     await web.chat.postMessage({
+      channel: requesterId,
+      text: `Your approval request has been sent to <@${approver}>.`,
+    });
+    await web.chat.postMessage({
       channel: approver,
       text: `New approval request from <@${requesterId}>: ${approvalText}`,
       blocks: [
