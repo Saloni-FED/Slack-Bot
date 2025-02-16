@@ -1,7 +1,7 @@
 # Slack Approval Bot Setup
 This README provides instructions for setting up and running a Slack approval bot using Express.js. The bot allows users to request approvals through a slash command and handles interactive responses.
 ## Architecture Diagram
-![alt text](./public/flow.png)
+![alt text](./public/draw.png)
 ## Prerequisites
 - Node.js and npm installed
 - A Slack workspace where you have permissions to add apps
